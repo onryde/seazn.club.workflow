@@ -1,0 +1,69 @@
+# Nightly deep simulation — moved here from onryde/seazn.club's sim-nightly.yml
+# so it runs from the public ops repo alongside the other scheduled jobs.
+# Unlike the curl-only workflows in this repo, this one needs the private
+# engine source (`npm run sim --workspace packages/engine`), so it checks out
+# onryde/seazn.club with a read-only PAT rather than hitting an HTTP endpoint.
+# The checkout happens transiently on the runner during the job — nothing is
+# committed into THIS repo, so the private source is never stored here.
+#
+# Requires (this repo's secrets):
+#   SOURCE_REPO_PAT — read-only PAT scoped to onryde/seazn.club (same one
+#     used for artifact downloads, if already set up for that purpose).
+name: Simulation (nightly)
+
+on:
+  schedule:
+    - cron: "0 0 1 * *"
+  workflow_dispatch:
+    inputs:
+      sim_runs:
+        description: "Divisions per sport×format"
+        required: false
+        default: "10000"
+
+permissions: {}
+
+concurrency:
+  group: sim-nightly
+  cancel-in-progress: true
+
+jobs:
+  simulate:
+    name: Deep simulation (SIM_RUNS=${{ inputs.sim_runs || '10000' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Secret missing — skip
+        if: ${{ secrets.SOURCE_REPO_PAT == '' }}
+        run: echo "::warning::SOURCE_REPO_PAT not set — nightly simulation did NOT run. Set it with 'gh secret set SOURCE_REPO_PAT --repo onryde/seazn.club.workflow'."
+
+      - uses: actions/checkout@v5
+        if: ${{ secrets.SOURCE_REPO_PAT != '' }}
+        with:
+          repository: onryde/seazn.club
+          token: ${{ secrets.SOURCE_REPO_PAT }}
+
+      - uses: pnpm/action-setup@v4
+        if: ${{ secrets.SOURCE_REPO_PAT != '' }}
+        with:
+          version: 10.34.5
+      - uses: actions/setup-node@v5
+        if: ${{ secrets.SOURCE_REPO_PAT != '' }}
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: ${{ secrets.SOURCE_REPO_PAT != '' }}
+      - name: Run the simulation + chaos harness
+        if: ${{ secrets.SOURCE_REPO_PAT != '' }}
+        run: npm run sim --workspace packages/engine
+        env:
+          SIM_RUNS: ${{ inputs.sim_runs || '10000' }}
+      - name: Simulation failure artifacts (repro with `npm run sim:replay -- <seedToken>`)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sim-failures-nightly
+          path: packages/engine/sim-failures/
+          if-no-files-found: ignore
+          retention-days: 14
