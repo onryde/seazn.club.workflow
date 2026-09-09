@@ -32,30 +32,35 @@ jobs:
     name: Deep simulation (SIM_RUNS=${{ inputs.sim_runs || '10000' }})
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    # `secrets.X` cannot be used directly inside an `if:` expression (GitHub
+    # Actions restriction) — map it to a job-level env var first, then gate
+    # steps on that instead.
+    env:
+      HAS_PAT: ${{ secrets.SOURCE_REPO_PAT != '' }}
     steps:
       - name: Secret missing — skip
-        if: ${{ secrets.SOURCE_REPO_PAT == '' }}
+        if: env.HAS_PAT != 'true'
         run: echo "::warning::SOURCE_REPO_PAT not set — nightly simulation did NOT run. Set it with 'gh secret set SOURCE_REPO_PAT --repo onryde/seazn.club.workflow'."
 
       - uses: actions/checkout@v5
-        if: ${{ secrets.SOURCE_REPO_PAT != '' }}
+        if: env.HAS_PAT == 'true'
         with:
           repository: onryde/seazn.club
           token: ${{ secrets.SOURCE_REPO_PAT }}
 
       - uses: pnpm/action-setup@v4
-        if: ${{ secrets.SOURCE_REPO_PAT != '' }}
+        if: env.HAS_PAT == 'true'
         with:
           version: 10.34.5
       - uses: actions/setup-node@v5
-        if: ${{ secrets.SOURCE_REPO_PAT != '' }}
+        if: env.HAS_PAT == 'true'
         with:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-        if: ${{ secrets.SOURCE_REPO_PAT != '' }}
+        if: env.HAS_PAT == 'true'
       - name: Run the simulation + chaos harness
-        if: ${{ secrets.SOURCE_REPO_PAT != '' }}
+        if: env.HAS_PAT == 'true'
         run: npm run sim --workspace packages/engine
         env:
           SIM_RUNS: ${{ inputs.sim_runs || '10000' }}
