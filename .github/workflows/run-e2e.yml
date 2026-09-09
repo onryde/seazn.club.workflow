@@ -71,12 +71,18 @@ jobs:
             --dir /tmp/e2e-bundle
           mkdir -p spec-tree
           tar -xzf /tmp/e2e-bundle/e2e-specs.tar.gz -C spec-tree
+          # The tarball's package.json is the monorepo ROOT's — its deps use
+          # pnpm's workspace:* protocol, which plain `npm install` can't
+          # resolve (EUNSUPPORTEDPROTOCOL). Only tarred for reference; not
+          # needed to install/run Playwright, so drop it before npm touches
+          # this directory.
+          rm -f spec-tree/package.json
 
       - uses: actions/setup-node@v5
         with:
           node-version: 26
 
-      - name: Install Playwright (spec tree's own package.json)
+      - name: Install Playwright
         working-directory: spec-tree
         run: |
           npm install --no-save @playwright/test
