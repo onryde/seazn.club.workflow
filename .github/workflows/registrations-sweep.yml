@@ -14,13 +14,13 @@
 # environment: no payment reminder had ever sent, no unpaid entry had ever
 # expired, and the promotion-lapse branch was dead code in prod.
 #
-# Auth: the x-cron-secret header must match the app's CRON_SECRET env — ONE
-# GitHub secret, mirrored into BOTH Fly apps' own secret stores:
-#   gh secret set CRON_SECRET                                   # this workflow (both legs)
-#   flyctl secrets set -c fly.stg.toml CRON_SECRET=<same>       # the staging app
-#   flyctl secrets set -c fly.toml     CRON_SECRET=<same>       # the production app
-# All three must carry the SAME value — sharing one GitHub secret across both
-# legs only works because both Fly apps are set to match it. Miss one and a
+# Auth: the x-cron-secret header must match the app's CRON_SECRET env — one
+# GitHub secret per environment, each mirrored into its own Fly app:
+#   gh secret set STAGE_CRON_SECRET                              # staging leg
+#   gh secret set PROD_CRON_SECRET                               # production leg
+#   flyctl secrets set -c fly.stg.toml CRON_SECRET=<STAGE value> # the staging app
+#   flyctl secrets set -c fly.toml     CRON_SECRET=<PROD value>  # the production app
+# Each GitHub secret must carry the SAME value as its Fly app. Miss one and a
 # leg looks scheduled (green workflow_dispatch runs, a cron entry in the
 # Actions tab) while silently doing nothing: it skips with a warning rather
 # than failing red, precisely so a missing secret does not fill the Actions
@@ -61,12 +61,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      CRON_SECRET: ${{ secrets.STAGE_CRON_SECRET }}
       BASE_URL: https://stg.seazn.club
     steps:
       - name: Secret missing — skip
         if: env.CRON_SECRET == ''
-        run: echo "::warning::CRON_SECRET not set — registrations not swept (staging). Set it with 'gh secret set CRON_SECRET' and mirror it into the Fly app."
+        run: echo "::warning::CRON_SECRET not set — registrations not swept (staging). Set it with 'gh secret set STAGE_CRON_SECRET' and mirror it into the Fly app."
 
       - name: POST /api/cron/registrations
         if: env.CRON_SECRET != ''
@@ -82,7 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      CRON_SECRET: ${{ secrets.PROD_CRON_SECRET }}
       PROD_SWEEP: ${{ vars.PROD_SWEEP_ENABLED }}
       BASE_URL: https://seazn.club
     steps:
@@ -92,7 +92,7 @@ jobs:
 
       - name: Secret missing — skip
         if: env.PROD_SWEEP == 'true' && env.CRON_SECRET == ''
-        run: echo "::warning::CRON_SECRET not set — registrations not swept (production). Set it with 'gh secret set CRON_SECRET' and mirror it into the Fly app."
+        run: echo "::warning::CRON_SECRET not set — registrations not swept (production). Set it with 'gh secret set PROD_CRON_SECRET' and mirror it into the Fly app."
 
       - name: POST /api/cron/registrations
         if: env.PROD_SWEEP == 'true' && env.CRON_SECRET != ''

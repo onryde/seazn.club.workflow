@@ -5,7 +5,7 @@
 #
 # Auth: the x-cron-secret header must match the app's CRON_SECRET env — set
 # the same value in BOTH places:
-#   gh secret set CRON_SECRET                      # this workflow
+#   gh secret set STAGE_CRON_SECRET / PROD_CRON_SECRET  # this workflow
 #   flyctl secrets set -c fly.stg.toml CRON_SECRET=<same>  # the app
 #
 # Skips with a warning until the GitHub secret exists (a missing secret must
@@ -30,12 +30,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      CRON_SECRET: ${{ secrets.STAGE_CRON_SECRET }}
       BASE_URL: https://stg.seazn.club
     steps:
       - name: Secret missing — skip
         if: env.CRON_SECRET == ''
-        run: echo "::warning::CRON_SECRET not set — funnel reminders not swept. Set it with 'gh secret set CRON_SECRET' and mirror it into the Fly app."
+        run: echo "::warning::CRON_SECRET not set — funnel reminders not swept. Set it with 'gh secret set STAGE_CRON_SECRET' and mirror it into the Fly app."
 
       - name: POST /api/funnel/remind
         if: env.CRON_SECRET != ''
@@ -51,12 +51,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      CRON_SECRET: ${{ secrets.PROD_CRON_SECRET }}
       BASE_URL: https://seazn.club
     steps:
       - name: Secret missing — skip
         if: env.CRON_SECRET == ''
-        run: echo "::warning::CRON_SECRET not set — funnel reminders not swept. Set it with 'gh secret set CRON_SECRET' and mirror it into the Fly app."
+        run: echo "::warning::CRON_SECRET not set — funnel reminders not swept. Set it with 'gh secret set PROD_CRON_SECRET' and mirror it into the Fly app."
 
       - name: POST /api/funnel/remind
         if: env.CRON_SECRET != ''
