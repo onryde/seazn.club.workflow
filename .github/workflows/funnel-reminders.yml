@@ -11,7 +11,7 @@
 # Skips with a warning until the GitHub secret exists (a missing secret must
 # not fill the Actions tab with red), and fails loud on any non-200 so a
 # mismatch or a broken endpoint is visible.
-name: Funnel Reminders STAGE
+name: Funnel Reminders
 
 on:
   schedule:
@@ -25,13 +25,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  remind:
+  remind-staging:
     name: Sweep unclaimed drafts (staging)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
       BASE_URL: https://stg.seazn.club
+    steps:
+      - name: Secret missing — skip
+        if: env.CRON_SECRET == ''
+        run: echo "::warning::CRON_SECRET not set — funnel reminders not swept. Set it with 'gh secret set CRON_SECRET' and mirror it into the Fly app."
+
+      - name: POST /api/funnel/remind
+        if: env.CRON_SECRET != ''
+        run: |
+          body=$(curl --silent --show-error --fail-with-body \
+            --max-time 60 --retry 2 --retry-all-errors \
+            -X POST "$BASE_URL/api/funnel/remind" \
+            -H "x-cron-secret: $CRON_SECRET")
+          echo "response: $body"
+
+  remind-production:
+    name: Sweep unclaimed drafts (production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      BASE_URL: https://seazn.club
     steps:
       - name: Secret missing — skip
         if: env.CRON_SECRET == ''

@@ -10,13 +10,13 @@
 # same value in BOTH places:
 #   gh secret set CRON_SECRET                                  # this workflow
 #   flyctl secrets set -c fly.stg.toml CRON_SECRET=<same>      # the app
-# For PRODUCTION, duplicate this file with the prod BASE_URL and mirror the
-# secret into the prod Fly app.
+# Runs against BOTH staging and production; mirror the secret into fly.toml too:
+#   flyctl secrets set -c fly.toml CRON_SECRET=<same>          # the prod app
 #
 # Skips with a warning until the GitHub secret exists, fails loud on any non-200,
 # and warns when reconcile corrects drift, hits a failure, or finds an orphan org
 # — so a persistent problem is visible in the Actions tab.
-name: Billing Quantity Reconcile STAGE
+name: Billing Quantity Reconcile
 
 on:
   schedule:
@@ -30,13 +30,40 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  reconcile:
+  reconcile-staging:
     name: Reconcile Stripe seat quantity (staging)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
       BASE_URL: https://stg.seazn.club
+    steps:
+      - name: Secret missing — skip
+        if: env.CRON_SECRET == ''
+        run: echo "::warning::CRON_SECRET not set — billing quantity not reconciled. Set it with 'gh secret set CRON_SECRET' and mirror it into the Fly app."
+
+      - name: POST /api/cron/billing-quantity
+        if: env.CRON_SECRET != ''
+        run: |
+          body=$(curl --silent --show-error --fail-with-body \
+            --max-time 300 --retry 2 --retry-all-errors \
+            -X POST "$BASE_URL/api/cron/billing-quantity" \
+            -H "x-cron-secret: $CRON_SECRET")
+          echo "response: $body"
+          corrected=$(echo "$body" | jq -r '.data.corrected // 0')
+          failed=$(echo "$body" | jq -r '.data.failed // 0')
+          orphans=$(echo "$body" | jq -r '.data.orphanOrgs // 0')
+          if [ "$corrected" != "0" ] || [ "$failed" != "0" ] || [ "$orphans" != "0" ]; then
+            echo "::warning::billing quantity: corrected=$corrected failed=$failed orphanOrgs=$orphans"
+          fi
+
+  reconcile-production:
+    name: Reconcile Stripe seat quantity (production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      BASE_URL: https://seazn.club
     steps:
       - name: Secret missing — skip
         if: env.CRON_SECRET == ''

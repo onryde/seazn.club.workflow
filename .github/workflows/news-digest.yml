@@ -13,7 +13,7 @@
 # Skips with a warning until the GitHub secret exists (a missing secret must
 # not fill the Actions tab with red), and fails loud on any non-200 so a
 # mismatch or a broken endpoint is visible.
-name: Weekly News Digest STAGE
+name: Weekly News Digest
 
 on:
   schedule:
@@ -27,13 +27,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  digest:
+  digest-staging:
     name: Generate weekly digests (staging)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
       BASE_URL: https://stg.seazn.club
+    steps:
+      - name: Secret missing — skip
+        if: env.CRON_SECRET == ''
+        run: echo "::warning::CRON_SECRET not set — weekly digests not generated. Set it with 'gh secret set CRON_SECRET' and mirror it into the Fly app."
+
+      - name: POST /api/cron/news-digest
+        if: env.CRON_SECRET != ''
+        run: |
+          body=$(curl --silent --show-error --fail-with-body \
+            --max-time 60 --retry 2 --retry-all-errors \
+            -X POST "$BASE_URL/api/cron/news-digest" \
+            -H "x-cron-secret: $CRON_SECRET")
+          echo "response: $body"
+
+  digest-production:
+    name: Generate weekly digests (production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      BASE_URL: https://seazn.club
     steps:
       - name: Secret missing — skip
         if: env.CRON_SECRET == ''
