@@ -28,6 +28,8 @@
 # grantMonthlyForAllWallets — mirrors billing-quantity.yml's own
 # corrected/failed/orphanOrgs conditional warning) — so a persistent problem
 # is visible in the Actions tab.
+# Staging legs are gated on vars.STAGING_CRON_ENABLED (must be the string 'true'). Unset/false = off: seazn-cron-stg owns staging. Re-enable with:
+#   gh variable set STAGING_CRON_ENABLED --body true
 name: Billing AI Credit Grant
 
 on:
@@ -48,14 +50,19 @@ jobs:
     timeout-minutes: 10
     env:
       CRON_SECRET: ${{ secrets.STAGE_CRON_SECRET }}
+      STAGING_CRON: ${{ vars.STAGING_CRON_ENABLED }}
       BASE_URL: https://stg.seazn.club
     steps:
+      - name: Staging cron disabled — skip
+        if: env.STAGING_CRON != 'true'
+        run: echo "::notice::STAGING_CRON_ENABLED is not 'true' — staging leg skipped (Cloudflare Worker seazn-cron-stg owns it). Re-enable with 'gh variable set STAGING_CRON_ENABLED --body true'."
+
       - name: Secret missing — skip
-        if: env.CRON_SECRET == ''
+        if: env.STAGING_CRON == 'true' && env.CRON_SECRET == ''
         run: echo "::warning::CRON_SECRET not set — AI credits not granted. Set it with 'gh secret set STAGE_CRON_SECRET' and mirror it into the Fly app."
 
       - name: POST /api/cron/billing-grant
-        if: env.CRON_SECRET != ''
+        if: env.STAGING_CRON == 'true' && env.CRON_SECRET != ''
         run: |
           body=$(curl --silent --show-error --fail-with-body \
             --max-time 300 --retry 2 --retry-all-errors \
